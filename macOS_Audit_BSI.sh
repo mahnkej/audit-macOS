@@ -36,7 +36,7 @@ os_vers_build=$(sw_vers -buildVersion)
 DATE=`date '+%Y%m%d'`
 
 # set summary file value
-Audit_folder=BSI_Audit/${DATE}
+Audit_folder=/private/tmp/BSI_Audit/${DATE}
 Audit_file=${Audit_folder}/${MODELNAME}_${SERIALNUMBER}__$(whoami)_${DATE}.txt
 evidence_folder=${Audit_folder}/evidence
 
