@@ -3,7 +3,7 @@
 Das Skript ermöglicht es macOS 10.11, 10.12 und 10.13 auf Basis der Anforderungen des BSI IT-Grundschutz zu auditieren.
 
 ## Ergebnis
-Als Ergebnis wird eine Textdatei sowie alle relvante Auditteilergebnisse als TXT-Dateien gesichert. Die Ergebnisdateien werden im Pfad BSI_Audit/${DATE} abgelegt.
+Als Ergebnis wird eine Textdatei sowie alle relvante Auditteilergebnisse als TXT-Dateien gesichert. Die Ergebnisdateien werden im Pfad /private/tmp/BSI_Audit/${DATE} abgelegt.
 
 ## Version
 V 0.9.0 RC
