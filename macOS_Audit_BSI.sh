@@ -8,11 +8,15 @@ COL_NC='\e[0m' # No Color
 COL_LIGHT_GREEN='\e[1;32m'
 COL_LIGHT_RED='\e[1;31m'
 COL_LIGHT_BLUE='\e[1;34m'
-TICK="[✓]"
-CROSS="[✗]"
+TICK="[${COL_LIGHT_GREEN}✓${COL_NC}]"
+CROSS="[${COL_LIGHT_RED}✗${COL_NC}]"
 INFO="[i]"
-AUDIT="[Audit]"
-ATTENTION="[!]"
+AUDIT="[${COL_LIGHT_BLUE}Audit${COL_NC}]"
+ATTENTION="[${COL_LIGHT_RED}!${COL_NC}]"
+
+# shellcheck disable=SC2034
+DONE="${COL_LIGHT_GREEN} done!${COL_NC}"
+OVER="\\r\\033[K"
 
 
 # Set Hardware values
@@ -107,7 +111,7 @@ suported_macos ()
 #
 ###################################################
 
-#suported_macos
+suported_macos
 CLEANUP
 AUDIT_PRE
 User_gt_500
@@ -1001,7 +1005,7 @@ if [ $(cat /etc/syslog.conf | grep -c "@127.0.0.1") == 1 ] &&  [ $(cat /etc/sysl
 	else
 		printf "	%b	Es ist kein zentrales Logging in der Datei syslog.conf aktiviert. %s\\n" "${CROSS}" | tee -a ${Audit_file}
 fi
-printf "\n"| tee -a ${Audit_file}
+
 
 printf "	%b	überprüfe, ob der Dienst Apple System Log für das Logging aktiv ist.  %s\\n" "${INFO}" | tee -a ${Audit_file}
 if [ $(cat /etc/syslog.conf | grep -c "@127.0.0.1") == 1 ]; then
@@ -3293,9 +3297,102 @@ fi
 done < ${Audit_folder}/TMP_User_List_gt_500
 
 printf "\n" | tee -a ${Audit_file}
+}
+
+SYS21M23_getsmbsettings ()
+{
+
+printf "	%b	Überprüfe die aktuellen Einstellung des SMB-Servers. %s\\n" "${INFO}" | tee -a ${Audit_file}
+defaults read /Library/Preferences/SystemConfiguration/com.apple.smb.server 2> /dev/null >> ${evidence_folder}/SYS21M23_getsmbserversettings
+if [[ $(cat ${evidence_folder}/SYS21M23_getsmbserversettings | grep -c "NetBIOSName") == 1 ]] ; then
+NetBIOSName=`cat ${evidence_folder}/SYSxxMx_getsmbserversettings | grep "NetBIOSName"| awk ' { print $3 }' | sed 's/;//'`
+printf "	%b	Der NetBIOS Name des lokalen SMB Servers laute: ${NetBIOSName} %s\\n" | tee -a ${Audit_file}
+fi
+
+if [[ $(cat ${evidence_folder}/SYS21M23_getsmbserversettings | grep -c "ServerDescription") == 1 ]] ; then
+ServerDescription=`cat ${evidence_folder}/SYS21M23_getsmbserversettings | grep "ServerDescription"| awk ' { print $3 }' | sed 's/;//'`
+printf "	%b	Die Beschreibung des lokalen SMB Servers laute: ${ServerDescription} %s\\n" | tee -a ${Audit_file}
+fi
+
+printf "\n"| tee -a ${Audit_file}
+
+printf "	%b	Überprüfe, auf welche eingehende Kommunikation gewartet und welcher Service dahinterliegt. %s\\n" "${INFO}"	 | tee -a ${Audit_file}
+sudo lsof -iTCP -sTCP:LISTEN -n -P >> ${evidence_folder}/SYS21M23_TCP_LISTEN
+printf "	%b	Das System horcht auf folgende eingehende Verbindungen. %s\\n" | tee -a ${Audit_file}
+while read TCP_LISTEN
+	do
+		printf "	%b		${TCP_LISTEN} %s\\n" | tee -a ${Audit_file}
+done < ${evidence_folder}/SYS21M23_TCP_LISTEN
+
+printf "\n"| tee -a ${Audit_file}
+
+while read USER_nsmb_conf
+	do
+		printf "	%b	Überprüfe die aktuellen Einstellungen der SMB-Client Konfiguration für Benutzer: ${USER_nsmb_conf}. %s\\n" "${INFO}" | tee -a ${Audit_file}
+		if [[ -e /Users/${USER_nsmb_conf}/Library/Preferences/nsmb.conf ]]; then
+			cat /Users/${USER_nsmb_conf}/Library/Preferences/nsmb.conf >> ${evidence_folder}/SYS21M23_${USER_nsmb_conf}_nsmb_conf
+			while read nsmb_conf
+			do
+				printf "	%b	Für den Benutzer: ${USER_nsmb_conf} wurden folgende SMB-Client Konfiguration gesichert. %s\\n" "${INFO}" | tee -a ${Audit_file}
+				printf "	%b		${nsmb_conf} %s\\n" | tee -a ${Audit_file}
+
+			done < ${evidence_folder}/SYS21M23_${USER_nsmb_conf}_nsmb_conf
+			
+		else
+			printf "	%b	Für den Benutzer ${USER_nsmb_conf} konnten keine SMB-Client Konfiguration emittelt werden. %s\\n" | tee -a ${Audit_file}
+		fi
+	done < ${Audit_folder}/TMP_User_List_gt_500
+
+printf "\n" | tee -a ${Audit_file}
+
+printf "	%b	Überprüfe die aktuellen globalen Einstellung der SMB-Client Konfiguration: %s\\n" "${INFO}" | tee -a ${Audit_file}
+if [[ -e /private/etc/nsmb.conf ]]; then
+	cat /private/etc/nsmb.conf >> ${evidence_folder}/SYS21M23_global_nsmb_conf
+	while read global_nsmb_conf
+	do
+		printf "	%b		${global_nsmb_conf} %s\\n" | tee -a ${Audit_file}
+	done < ${evidence_folder}/SYS21M23_global_nsmb_conf
+else
+	printf "	%b	Es wurden keine Datei nsmb.conf im Pfad /private/etc/ vorgefunden somit sind folgende Default-Einstellungen aktiv: %s\\n" "${INFO}" | tee -a ${Audit_file}
+	printf "	%b		[default] %s\\n" | tee -a ${Audit_file}
+	printf "	%b		nbtimeout = 1s %s\\n" | tee -a ${Audit_file}
+	printf "	%b		minauth = NTLMv2 %s\\n" | tee -a ${Audit_file}
+	printf "	%b		port445 = normal %s\\n" | tee -a ${Audit_file}	
+	printf "	%b		streams = yes %s\\n" | tee -a ${Audit_file}
+	printf "	%b		notify_off = no %s\\n" | tee -a ${Audit_file}
+	printf "	%b		kloglevel = 0 %s\\n" | tee -a ${Audit_file}
+	printf "	%b		protocol_vers_map = 7 (SMB 1/2/3 should be enabled) %s\\n" | tee -a ${Audit_file}	
+	printf "	%b		signing_required = yes %s\\n" | tee -a ${Audit_file}
+	printf "	%b		signing_req_vers = 6 (SMB 2/3 should be enabled) %s\\n" | tee -a ${Audit_file}
+	printf "	%b		validate_neg_off = no %s\\n" | tee -a ${Audit_file}
+	printf "	%b		max_resp_timeout = 30s %s\\n" | tee -a ${Audit_file}	
+	printf "	%b		submounts_off = no %s\\n" | tee -a ${Audit_file}
+	printf "	%b		read_async_cnt = 4 %s\\n" | tee -a ${Audit_file}
+	printf "	%b		write_async_cnt = 4 %s\\n" | tee -a ${Audit_file}
+	printf "	%b		dir_cache_async_cnt = 10 %s\\n" | tee -a ${Audit_file}
+	printf "	%b		dir_cache_max_cnt = 2048 %s\\n" | tee -a ${Audit_file}
+	printf "	%b		dir_cache_max = 60s %s\\n" | tee -a ${Audit_file}	
+	printf "	%b		dir_cache_min = 30s %s\\n" | tee -a ${Audit_file}	
+	
+
+fi
+printf "\n" | tee -a ${Audit_file}
+
+printf "	%b	Im Abschnitt [default] sollten folgende globale Einstellungen hinterlegt sein. %s\\n" "${INFO}" | tee -a ${Audit_file}
+	printf "	%b		[default] %s\\n" | tee -a ${Audit_file}
+	printf "	%b		protocol_vers_map=4 %s\\n" | tee -a ${Audit_file}
+	printf "	%b		signing_req_vers=4 %s\\n" | tee -a ${Audit_file}
+	printf "	%b		signing_required=yes %s\\n" | tee -a ${Audit_file}
+	printf "	%b		minauth=ntlmv2 %s\\n" | tee -a ${Audit_file}
+	printf "	%b		notify_off=yes %s\\n" | tee -a ${Audit_file}
+	printf "	%b		port445=no_netbios %s\\n" | tee -a ${Audit_file}
+	printf "	%b		unix extensions=no %s\\n" | tee -a ${Audit_file}
+	printf "	%b		veto files = /._*/.DS_Store/ %s\\n" | tee -a ${Audit_file}
+printf "\n" | tee -a ${Audit_file}	
 
 }
 
+SYS21M23_getsmbsettings
 SYS21M23_AirDrop
 SYS21M23_NoMulticastAdvertisements
 SYS21M23_access_screensharing
