@@ -5,7 +5,7 @@ Das Skript ermöglicht es seit Version 0.9.7 macOS 10.11, 10.12, 10.13 und 10.14
 ## Ergebnis
 Als Ergebnis wird eine Textdatei sowie alle relvante Auditteilergebnisse als TXT-Dateien gesichert. Die Ergebnisdateien werden im Pfad /private/tmp/BSI_Audit/${DATE} abgelegt.
 
-## Version
+## Version 0.9.7
 Wahrscheinlich habe ich nicht alle mögliche Input/Output-Fehler auf Grund von unterschiedlichen Gegebenheiten erkannt und abgefangen. Für Verbesserungsvorschläge bin ich jederzeit offen. 
 
 ## Vorausetzungen
