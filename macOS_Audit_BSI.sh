@@ -30,10 +30,10 @@ WERBINICH=`id -F "$(whoami)"`
 BENUTZERID=`id -u "$(whoami)"`
 product_version=$(sw_vers -productVersion)
 os_vers=( ${product_version//./ } )
-os_vers_major="${os_vers[0]}"
-os_vers_minor="${os_vers[1]}"
-os_vers_patch="${os_vers[2]}"
-os_vers_build=$(sw_vers -buildVersion)
+OS_vers_major="${os_vers[0]}"
+OS_vers_minor="${os_vers[1]}"
+OS_vers_patch="${os_vers[2]}"
+OS_vers_build=$(sw_vers -buildVersion)
 
 
 # Set date value
@@ -41,7 +41,7 @@ DATE=`date '+%Y%m%d'`
 
 # set summary file value
 Audit_folder=/private/tmp/BSI_Audit/${DATE}
-Audit_file=${Audit_folder}/${MODELNAME}_${SERIALNUMBER}__$(whoami)_${DATE}.txt
+Audit_file=${Audit_folder}/${SERIALNUMBER}_${DATE}.txt
 evidence_folder=${Audit_folder}/evidence
 
 # define global functions
@@ -58,6 +58,7 @@ CHECK_IF_ROOT ()
 
 AUDIT_PRE ()
 {
+mkdir -p -m 0777 /private/tmp/BSI_Audit
 mkdir -p -m 0777 ${Audit_folder}
 mkdir -p -m 0777 ${evidence_folder}
 }
@@ -95,14 +96,18 @@ find /Applications -iname *.app -maxdepth 1 -print | sed 's/\/Applications\///g'
 
 suported_macos ()
 {
-	if [[ ${os_vers_major} -eq 10 ]] && [[ ${os_vers_minor} -ge 10 ]] && [[ ${os_vers_minor} -lt 14 ]]; then
-		printf "	%b	Die aktuelle Version von macOS wird vom Script unterstützt %s\\n" "${TICK}"
+	GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
+	
+	if [[ ${OS_vers_major} -eq 10 ]] && [[ ${OS_vers_minor} -ge 10 ]] && [[ ${OS_vers_minor} -lt 15 ]]; then
+		printf "	%b	Die aktuelle Version ${OSXVERSION} von macOS wird vom Script unterstützt %s\\n" "${TICK}" | tee -a ${Audit_file}
 	else
-		printf "	%b	Die aktuelle Version von macOS wird vom Script nicht unterstützt %s\\n" "${CROSS}"
-		printf "	%b	Das Script wird beendet %s\\n"
+		printf "	%b	Die aktuelle Version ${OSXVERSION} von macOS wird vom Script nicht unterstützt %s\\n" "${CROSS}" | tee -a ${Audit_file}
+		printf "	%b	Das Script wird beendet %s\\n" | tee -a ${Audit_file}
 		exit
 	fi
-		
+	GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
+	
+	sleep 1	
 }
 
 ################################################### 
@@ -111,12 +116,12 @@ suported_macos ()
 #
 ###################################################
 
-suported_macos
 CLEANUP
 AUDIT_PRE
 User_gt_500
 User_LIST
 TMP_Folder_Applications
+suported_macos
 
 ################################################### 
 #
@@ -172,9 +177,6 @@ fi
 printf "\n" | tee -a ${Audit_file}
 }
 
-SYS21M1_getglobalpolicy
-
-
 SYS21M1_mdm_passwordpolicy ()
 {
 printf "	%b	Überprüfe, ob via Profilmanager das System ${MODELIDENTIFIER} verwaltet wird.  %s\\n" "${INFO}" | tee -a ${Audit_file}
@@ -187,6 +189,8 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	if [ $(system_profiler SPConfigurationProfileDataType | grep -c "com.apple.mobiledevice.passwordpolicy") -gt 0 ] ; then
 	system_profiler SPConfigurationProfileDataType | sed -n '/com.apple.mobiledevice.passwordpolicy/,/}/p' >> ${evidence_folder}/SYS21M1_mdm_passwordpolicy
 		printf "	%b	die Passwort-Einstellungen werden per MDM verwaltet. %s\\n" "${TICK}" | tee -a ${Audit_file}
+	
+	
 	#################################################
 	# 
 	# allowSimple Passwords
@@ -202,6 +206,7 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	else
 		printf "	%b	Die Verwendung von einfachen Passwörtern ist nicht konfiguriert. %s\\n" "${CROSS}" | tee -a ${Audit_file}
 	fi	
+	
 	
 	#################################################
 	# 
@@ -219,6 +224,7 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 		printf "	%b	alphanumerische Werte sind nicht gefordert. %s\\n" "${CROSS}" | tee -a ${Audit_file}		
 	fi		
 
+	
 	#################################################
 	# 
 	# minLength Passwords
@@ -240,6 +246,7 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 		printf "	%b	Es ist keine minimale Passwortlänge gefordert. %s\\n" "${CROSS}" | tee -a ${Audit_file}
 	fi
 
+	
 	#################################################
 	# 
 	# Password maxGracePeriod
@@ -259,6 +266,7 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 		printf "	%b	Es ist keine Grace-Period konfiguriert. %s\\n" "${CROSS}" | tee -a ${Audit_file}
 	fi
 
+	
 	#################################################
 	# 
 	# minComplexChars Passwords
@@ -283,24 +291,18 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 		
 		printf "	%b	die Passwort-Einstellungen werden nicht per MDM verwaltet. %s\\n\n" "${TICK}" | tee -a ${Audit_file}
 	fi
+else
+	
+	printf "	%b	Das System ${MODELIDENTIFIER} wird nicht mittels Profilen verwaltet. %s\\n" "${CROSS}" | tee -a ${Audit_file}
 	
 fi
-}
-SYS21M1_mdm_passwordpolicy
 
-SYS21M1_gethashtypes ()
-{
-printf "	%b	Die folgenden aufgeführten Hash Types sollten nicht mehr verwendet werden: %s\\n" "${ATTENTION}" | tee -a ${Audit_file}
-printf "	%b		cram-md5	Required for IMAP. %s\\n" | tee -a ${Audit_file}
-printf "	%b		RECOVERABLE	Required for APOP and WebDAV. Only available on Mac OS X Server edition. %s\\n" | tee -a ${Audit_file}
-printf "	%b		SMB-NT		Required for compatibility with Windows NT/XP file sharing. %s\\n" | tee -a ${Audit_file}
-printf "	%b		SHA1		Legacy hash for loginwindow. %s\\n" | tee -a ${Audit_file}
-printf "	%b		SALTED-SHA1	Legacy hash for loginwindow. %s\\n" | tee -a ${Audit_file}
-printf "	%b		SALTED-SHA512	Legacy hash for loginwindow. %s\\n" | tee -a ${Audit_file}
 printf "\n" | tee -a ${Audit_file}
 
+}
 
-
+sub_SYS21M1_gethashtypes ()
+{
 while read User_gt_500
 do
 printf "	%b 	Überprüfe für den Benutzer ${User_gt_500} , welche Hash-Algorithmen genutzt werden. %s\\n" "${INFO}" | tee -a ${Audit_file}
@@ -376,12 +378,64 @@ while read ROOT_Hashes
 else
 	printf "	%b	der Benutzer root war noch nie aktiviert worden und somit keine Passwort Hashes hinterlegt. %s\\n" "${TICK}" | tee -a ${Audit_file}
 fi
-
-printf "\n" | tee -a ${Audit_file}
 }
 
+	
+	
+SYS21M1_gethashtypes ()
+{	
+	
+printf "	%b	Die folgenden aufgeführten Hash Types sollten nicht mehr verwendet werden: %s\\n" "${ATTENTION}" | tee -a ${Audit_file}
+printf "	%b		cram-md5	Required for IMAP. %s\\n" | tee -a ${Audit_file}
+printf "	%b		RECOVERABLE	Required for APOP and WebDAV. Only available on Mac OS X Server edition. %s\\n" | tee -a ${Audit_file}
+printf "	%b		SMB-NT		Required for compatibility with Windows NT/XP file sharing. %s\\n" | tee -a ${Audit_file}
+printf "	%b		SHA1		Legacy hash for loginwindow. %s\\n" | tee -a ${Audit_file}
+printf "	%b		SALTED-SHA1	Legacy hash for loginwindow. %s\\n" | tee -a ${Audit_file}
+printf "	%b		SALTED-SHA512	Legacy hash for loginwindow. %s\\n" | tee -a ${Audit_file}
+printf "\n" | tee -a ${Audit_file}
+
+if [[ ${OS_vers_major} -eq 10 ]] && [[ ${OS_vers_minor} -ge 10 ]] && [[ ${OS_vers_minor} -lt 14 ]]; then
+
+	sub_SYS21M1_gethashtypes
+
+	else
+		printf "	%b 	Überprüfe die macOS Version und ob der Pfad /var durch Systemintegritätsschutz (SIP) geschützt wird. %s\\n" "${INFO}" | tee -a ${Audit_file}
+		
+		SIPSTATUS=`csrutil status 2> /dev/null |  awk ' { print $5 }'`
+		if [ ${SIPSTATUS} == "enabled." ]; then
+			
+			printf "	%b	System Integrity Protection (SIP) ist aktiv %s\\n" "${TICK}" | tee -a ${Audit_file}
+			# ab macOs 10.14 wird mittels SIP der Zugriff auf die Pfade /System , /usr , /bin , /sbin und /var geschützt
+			printf "	%b	Die Zugriffe auf die Pfade /System , /usr , /bin , /sbin und /var sind durch SIP unter macOS ${OSXVERSION} Build-Nummer ${OS_vers_build} geschützt. %s\\n" "${TICK}"
+			printf "	%b	Es kann nicht überprüft werden, welche Hash Algorithmen für den Benutzer root aktiv sind. %s\\n" "${INFO}" | tee -a ${Audit_file}
+			while read User_gt_500
+				do
+					printf "	%b	Es kann nicht überprüft werden, welche Hash Algorithmen für den Benutzer ${User_gt_500} aktiv sind. %s\\n" "${INFO}" | tee -a ${Audit_file}
+				done < ${Audit_folder}/TMP_User_List_gt_500
+			
+		else
+			printf "	%b	System Integrity Protection (SIP) ist nicht aktiv %s\\n" "${CROSS}" | tee -a ${Audit_file}
+			printf "	%b	Die Zugriffe auf den Pfad /System , /usr , /bin , /sbin und /var sind durch SIP nicht geschützt. %s\\n" "${CROSS}"
+			
+			sub_SYS21M1_gethashtypes
+			
+		fi
+		
+fi
+
+printf "\n" | tee -a ${Audit_file}
+
+}
+
+SYS21M1_getglobalpolicy
+sleep 0.5
+SYS21M1_mdm_passwordpolicy
+sleep 0.5
 SYS21M1_gethashtypes
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
+
 
 ###################################################
 #
@@ -420,7 +474,6 @@ printf "\n" | tee -a ${Audit_file}
 
 }
 
-SYS21M2_USERID_ROOT
 
 ###################################################
 # 
@@ -445,7 +498,6 @@ while read WHEEL_Member
 
 }
 
-SYS21M2_MEMBER_WHEEL
 
 ###################################################
 # 
@@ -470,8 +522,6 @@ printf "\n" | tee -a ${Audit_file}
 }
 
 
-SYS21M2_MEMBER_ADMIN
-
 ###################################################
 # 
 # SYS.2.1.M2 Benutzer mit UID > 500
@@ -491,8 +541,6 @@ while read USER_gt_500
 printf "\n\n" | tee -a ${Audit_file}
 }
 
-
-SYS21M2_USER_GREATER500
 
 ###################################################
 # 
@@ -515,7 +563,17 @@ if [ ${GASTKONTO} == "0;" ]; then
 		printf "\n" | tee -a ${Audit_file}
 }
 
+SYS21M2_USERID_ROOT
+sleep 0.5
+SYS21M2_MEMBER_WHEEL
+sleep 0.5
+SYS21M2_MEMBER_ADMIN
+sleep 0.5
+SYS21M2_USER_GREATER500
+sleep 0.5
 SYS21M2_USER_GUEST
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -546,10 +604,7 @@ SYS21M3 ()
 	local SW_Auto_CriticalUpdateInstall_WC=`defaults read /Library/Preferences/com.apple.SoftwareUpdate.plist | grep "CriticalUpdateInstall" | wc -l`
 	local SW_Auto_CriticalUpdateInstall=`defaults read /Library/Preferences/com.apple.SoftwareUpdate.plist | grep "CriticalUpdateInstall" | awk ' { print $3 }'`
 	local SW_LastUpdatesAvailable=`defaults read /Library/Preferences/com.apple.SoftwareUpdate.plist | grep "LastUpdatesAvailable" | awk ' { print $3 }'`
-    #softwareupdate -l 2>&1 | grep "No new software available" | wc -l
-    #softwareupdate -l 2>&1 >> ${Audit_folder}/SYS21M3_Softwareupdates_Avail
-
-	
+		
 	printf "	%b	Überprüfe, ob automatisch nach Updates im App-Store gesucht wird. %s\\n" "${INFO}" | tee -a ${Audit_file}
 	defaults read /Library/Preferences/com.apple.SoftwareUpdate.plist 2> /dev/null >> ${evidence_folder}/SYS21M3_Softwareupdate
 	if [[ ${SW_Update_Search} == "1;" ]]; then
@@ -622,6 +677,8 @@ SYS21M3 ()
 }	
 	
 SYS21M3
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -754,6 +811,8 @@ fi
 }
 
 SYS21M4
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -775,7 +834,8 @@ printf %s "\
 SYS21M5 ()
 
 {
-if [[ ${os_vers_major} -eq 10 ]] && [[ ${os_vers_minor} -ge 10 ]] && [[ ${os_vers_minor} -lt 14 ]]; then
+if [[ ${OS_vers_major} -eq 10 ]] && [[ ${OS_vers_minor} -ge 10 ]] && [[ ${OS_vers_minor} -lt 14 ]]; then
+	
 	while read User_List_gt_500
 		do
 		
@@ -920,13 +980,15 @@ if [[ ${os_vers_major} -eq 10 ]] && [[ ${os_vers_minor} -ge 10 ]] && [[ ${os_ver
 		
 		done < ${Audit_folder}/TMP_User_List_gt_500
 		
-elif [[ ${os_vers_major} -eq 10 ]] && [[ ${os_vers_minor} -eq 14 ]] && [[ ${os_vers_patch} -ge 3 ]]; then
-	printf "%b Die Version ${os_vers_major}.${os_vers_minor}.${os_vers_patch} ist derzeit nicht unterstützt %s\\n" "${ATTENTION}" | tee -a ${Audit_file}
+elif [[ ${OS_vers_major} -eq 10 ]] && [[ ${OS_vers_minor} -eq 14 ]] && [[ ${OS_vers_patch} -ge 3 ]]; then
+	printf "	%b Die Version ${OS_vers_major}.${OS_vers_minor}.${OS_vers_patch} ist derzeit nicht unterstützt %s\\n" "${ATTENTION}" | tee -a ${Audit_file}
 fi	
 printf "\n" | tee -a ${Audit_file}
 }
 
 SYS21M5
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -958,6 +1020,8 @@ SYS21M6 ()
 }
 
 SYS21M6
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 ##################################################
@@ -1094,6 +1158,8 @@ while read User_List_gt_500
 }
 
 SYS21M7
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 ##################################################
@@ -1159,6 +1225,8 @@ printf "\n" | tee -a ${Audit_file}
 }
 
 SYS21M8
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -1200,6 +1268,8 @@ printf "	%b	Bitte das Infrastruktur- und Betriebsführungskonzept sowie Betriebs
 }
 
 SYS24M1
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -1239,7 +1309,7 @@ fi
 printf "\n" | tee -a ${Audit_file}
 }
 
-SYS24M2_SIP
+
 
 ###################################################
 # 
@@ -1253,20 +1323,19 @@ printf "	%b	Überprüfung des Xprotect Status %s\\n" "${INFO}" | tee -a ${Audit_
 
 defaults read /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/XProtect.meta.plist 2> /dev/null >> ${evidence_folder}/SYS24M2_XProtect
 
-if [[ ${os_vers_major} -eq 10 ]] && [[ ${os_vers_minor} -gt 9 ]]; then
+if [[ ${OS_vers_major} -eq 10 ]] && [[ ${OS_vers_minor} -gt 9 ]]; then
 
   last_xprotect_update_epoch_time=$(printf "%s\n" `for i in $(pkgutil --pkgs=".*XProtect.*"); do pkgutil --pkg-info $i | awk '/install-time/ {print $2}'; done` | sort -n | tail -1)
   last_xprotect_update_human_readable_time=`/bin/date -r "$last_xprotect_update_epoch_time" '+%d.%m.%Y %H:%M:%S'`
   XPROTECTCHECKRESULT="$last_xprotect_update_human_readable_time"
-  printf " 		Die letzte Xprotect Änderung erfolgte am "${XPROTECTCHECKRESULT}"\\n" | tee -a ${Audit_file}
+  printf "		Die letzte Xprotect Änderung erfolgte am "${XPROTECTCHECKRESULT}" \\n" | tee -a ${Audit_file}
   
 fi
 
-printf " 		Die letzte Xprotect Änderung erfolgte am "${XPROTECTCHECKRESULT}"\\n" | tee -a ${Audit_file}
 printf "\n\n" | tee -a ${Audit_file}
 }
 
-SYS24M2_Xprotect
+
 
 ###################################################
 # 
@@ -1288,7 +1357,16 @@ if [ ${GATEKEEPERSTATUS} == "enabled" ]; then
 fi
 }
 
+
+SYS24M2_SIP
+sleep 0.5
+
+SYS24M2_Xprotect
+sleep 0.5
+
 SYS24M2_Gatekeeper
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -1327,7 +1405,6 @@ printf "\n" | tee -a ${Audit_file}
 printf "	%b	Auflistung der Konten, die der Gruppe wheel zugehören. %s\\n" "${INFO}" | tee -a ${Audit_file}
 }
 
-SYS24M3_USERID_ROOT
 
 ###################################################
 # 
@@ -1352,7 +1429,6 @@ while read WHEEL_Member
 
 }
 
-SYS24M3_MEMBER_WHEEL
 
 ###################################################
 # 
@@ -1372,9 +1448,6 @@ while read USER_gt_500
 	
 printf "\n\n" | tee -a ${Audit_file}
 }
-
-
-SYS24M3_USER_GREATER500
 
 ###################################################
 # 
@@ -1397,7 +1470,18 @@ if [ ${GASTKONTO} == "0;" ]; then
 		printf "\n" | tee -a ${Audit_file}
 }
 
+SYS24M3_USERID_ROOT
+sleep 0.5
+
+SYS24M3_MEMBER_WHEEL
+sleep 0.5
+
+SYS24M3_USER_GREATER500
+sleep 0.5
+
 SYS24M3_USER_GUEST
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 ###################################################
@@ -1444,6 +1528,8 @@ SYS21M9 ()
 }
 
 SYS21M9
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 ##################################################
@@ -1481,6 +1567,8 @@ printf "\n" | tee -a ${Audit_file}
 }
 
 SYS21M10
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 ##################################################
@@ -1508,6 +1596,8 @@ SYS21M11 ()
 }
 
 SYS21M11
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 #################################################
@@ -1541,17 +1631,20 @@ SYS21M12 ()
 		while read macOS_Mojave_incompatible
 			do
 				printf "	%b	${macOS_Mojave_incompatible} %s\\n" | tee -a ${Audit_file}		
-			done < ${evidence_folder}/SYS21M12_macOS_Mojave_incompatible
-		
+		done < ${evidence_folder}/SYS21M12_macOS_Mojave_incompatible
+		printf "\n"| tee -a ${Audit_file}
 	else
 		printf "	%b	Es sind aktuell keine 32-Bit Anwendungen auf dem System installiert ist. 
 		Alle Anwendungen sind kompatible für macOS 10.14 (Mojave). %s\\n" "${TICK}"	 | tee -a ${Audit_file}
 	fi
 	printf "	%b	Zugrundeliegende Anforderungs- bzw. Migrationsprozesse bitte benennen. %s\\n" "${INFO}"	 | tee -a ${Audit_file}
 	printf "	%b	Da diese nicht technisch geprüft werden können.	%s\\n" 	 | tee -a ${Audit_file}
+	printf "\n"| tee -a ${Audit_file}
 }
 
 SYS21M12
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 #################################################
@@ -1593,8 +1686,6 @@ fi
 printf "\n" | tee -a ${Audit_file}
 }
 
-SYS21M13_Firmware_password
-
 ###################################################
 # 
 # SYS.2.1.M13 Benutzer mit der ID 0
@@ -1612,8 +1703,6 @@ printf "\n" | tee -a ${Audit_file}
 
 }
 
-SYS21M13_USERID_ROOT
-
 ###################################################
 # 
 # SYS.2.1.M13 Wird der Benutzer root genutzt
@@ -1630,8 +1719,6 @@ else
 fi
 printf "\n" | tee -a ${Audit_file}
 }
-
-SYS21M13_ROOT_activ 
 
 ###################################################
 # 
@@ -1656,8 +1743,6 @@ while read WHEEL_Member
 
 }
 
-SYS21M13_MEMBER_WHEEL
-
 ###################################################
 # 
 # SYS.2.1.M13 Benutzer der Gruppe admin
@@ -1680,10 +1765,6 @@ while read ADMIN_Member
 printf "\n" | tee -a ${Audit_file}
 }
 
-
-SYS21M13_MEMBER_ADMIN
-
-
 ###################################################
 # 
 # SYS.2.1.M13 nur admin dürfen systemänderungen durchführen
@@ -1704,7 +1785,23 @@ printf "	%b	Überprüfe, ob nur Administratoren systemnahe Einstellungen ändern
 printf "\n" | tee -a ${Audit_file}
 }
 
+SYS21M13_Firmware_password
+sleep 0.5
+
+SYS21M13_USERID_ROOT
+sleep 0.5
+
+SYS21M13_ROOT_activ 
+sleep 0.5
+
+SYS21M13_MEMBER_WHEEL
+sleep 0.5
+
+SYS21M13_MEMBER_ADMIN
+sleep 0.5
+
 SYS21M13_ONLY_ADMIN_AllOWED_SyS_Changes
+sleep 1
 
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
@@ -1737,6 +1834,8 @@ SYS21M14 ()
 }
 
 SYS21M14
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 #################################################
@@ -1767,6 +1866,8 @@ SYS21M15 ()
 }
 
 SYS21M15
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 #################################################
@@ -2018,7 +2119,7 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	if [[ $(system_profiler SPConfigurationProfileDataType | grep "allowMusicService"| awk ' { print $3 }') == "0;" ]] ; then
 		printf "	%b	Apple Music ist nicht erlaubt. %s\\n\n" "${TICK}" | tee -a ${Audit_file}
 	else
-		printf "	%b	Apple Music ist erlaubt. %s\\n\n" "${TICK}" | tee -a ${Audit_file}
+		printf "	%b	Apple Music ist erlaubt. %s\\n\n" "${ATTENTION}" | tee -a ${Audit_file}
 	fi	
 
 	#################################################
@@ -2266,6 +2367,8 @@ printf "\n" | tee -a ${Audit_file}
 }
 
 SYS21M16
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 #################################################
@@ -2291,6 +2394,8 @@ SYS21M17 ()
 }
 
 SYS21M17
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 #################################################
@@ -2374,6 +2479,8 @@ SYS21M18 ()
 }
 
 SYS21M18
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 #################################################
@@ -2432,7 +2539,9 @@ while read User_List_gt_500
 		printf "\n"| tee -a ${Audit_file}
 	done < ${Audit_folder}/TMP_User_List_gt_500
 }
+
 SYS21M19
+sleep 1
 
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
@@ -2477,7 +2586,6 @@ SYS21M20_Remotemanagement_Apps ()
 	printf "\n" | tee -a ${Audit_file}		
 }
 
-SYS21M20_Remotemanagement_Apps
 
 ################################################
 # 
@@ -2527,7 +2635,6 @@ SYS21M20_ARDAgent ()
 	printf "\n" | tee -a ${Audit_file}
 }
 
-SYS21M20_ARDAgent
 
 ################################################
 # 
@@ -2581,7 +2688,6 @@ fi
 printf "\n" | tee -a ${Audit_file}
 }
 
-SYS21M20_SSH_Deny_Users_Groups
 
 #################################################
 # 
@@ -2611,8 +2717,7 @@ if [ -e /etc/ssh/sshd_config ]; then
 fi
 printf "\n" | tee -a ${Audit_file}
 }
-	
-SYS21M20_SSH_PermitRootLogin
+
 
 ################################################
 # 
@@ -2650,7 +2755,6 @@ SYS21M20_SSHAgent ()
 	printf "\n" | tee -a ${Audit_file}
 }
 
-SYS21M20_SSHAgent
 
 ################################################
 # 
@@ -2705,7 +2809,23 @@ SYS21M20_screensharing ()
 	
 }
 
+SYS21M20_Remotemanagement_Apps
+sleep 0.5
+
+SYS21M20_ARDAgent
+sleep 0.5
+
+SYS21M20_SSH_Deny_Users_Groups
+sleep 0.5
+
+SYS21M20_SSH_PermitRootLogin
+sleep 0.5
+
+SYS21M20_SSHAgent
+sleep 0.5
+
 SYS21M20_screensharing
+sleep 1
 
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
@@ -3130,15 +3250,35 @@ printf "\n" | tee -a ${Audit_file}
 
 
 SYS21M21_SSH_Deny_Users_Groups
+sleep 0.5
+
 SYS21M21_SSH_PermitRootLogin
+sleep 0.5
+
 SYS21M21_SSH_login_grace_time
+sleep 0.5
+
 SYS21M21_SSH_MaxAuthTries
+sleep 0.5
+
 SYS21M21_SSH_ClientAliveInterval
+sleep 0.5
+
 SYS21M21_SSH_ChallengeResponseAuthentication
+sleep 0.5
+
 SYS21M21_SSH_PubkeyAuthentication
+sleep 0.5
+
 SYS21M21_SSH_Ciphers
-SYS21M21_SSH_MACs 
+sleep 0.5
+
+SYS21M21_SSH_MACs
+sleep 0.5
+
 SYS21M21_SSH_KexAlgorithms
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -3172,12 +3312,15 @@ SYS21M22_AutoLogOutDelay ()
 		elif [[ ${VALUE_AutoLogOutDelay} == 0 ]] ; then	
 			printf "	%b	Es ist ein Wert von \"${VALUE_AutoLogOutDelay}\" Sekunden derzeit konfiguriert. Dies bedeutet die Funktion Auto Logout ist deaktiviert. %s\\n" "${CROSS}" | tee -a ${Audit_file}
 		fi
+	else
+		printf "	%b	Es ist kein Wert derzeit konfiguriert. Dies bedeutet die Funktion Auto Logout ist deaktiviert. %s\\n" "${CROSS}" | tee -a ${Audit_file}
 	fi
 	printf "\n"| tee -a ${Audit_file}
 	
 }
 
 SYS21M22_AutoLogOutDelay
+sleep 1
 
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
@@ -3305,13 +3448,13 @@ SYS21M23_getsmbsettings ()
 printf "	%b	Überprüfe die aktuellen Einstellung des SMB-Servers. %s\\n" "${INFO}" | tee -a ${Audit_file}
 defaults read /Library/Preferences/SystemConfiguration/com.apple.smb.server 2> /dev/null >> ${evidence_folder}/SYS21M23_getsmbserversettings
 if [[ $(cat ${evidence_folder}/SYS21M23_getsmbserversettings | grep -c "NetBIOSName") == 1 ]] ; then
-NetBIOSName=`cat ${evidence_folder}/SYSxxMx_getsmbserversettings | grep "NetBIOSName"| awk ' { print $3 }' | sed 's/;//'`
-printf "	%b	Der NetBIOS Name des lokalen SMB Servers laute: ${NetBIOSName} %s\\n" | tee -a ${Audit_file}
+NetBIOSName=`cat ${evidence_folder}/SYS21M23_getsmbserversettings | grep "NetBIOSName"| awk ' { print $3 }' | sed 's/;//'`
+printf "	%b	Der NetBIOS Name des lokalen SMB Servers lautet: ${NetBIOSName} %s\\n" | tee -a ${Audit_file}
 fi
 
 if [[ $(cat ${evidence_folder}/SYS21M23_getsmbserversettings | grep -c "ServerDescription") == 1 ]] ; then
 ServerDescription=`cat ${evidence_folder}/SYS21M23_getsmbserversettings | grep "ServerDescription"| awk ' { print $3 }' | sed 's/;//'`
-printf "	%b	Die Beschreibung des lokalen SMB Servers laute: ${ServerDescription} %s\\n" | tee -a ${Audit_file}
+printf "	%b	Die Beschreibung des lokalen SMB Servers lautet: ${ServerDescription} %s\\n" | tee -a ${Audit_file}
 fi
 
 printf "\n"| tee -a ${Audit_file}
@@ -3393,10 +3536,20 @@ printf "\n" | tee -a ${Audit_file}
 }
 
 SYS21M23_getsmbsettings
+sleep 0.5
+
 SYS21M23_AirDrop
+sleep 0.5
+
 SYS21M23_NoMulticastAdvertisements
+sleep 0.5
+
 SYS21M23_access_screensharing
+sleep 0.5
+
 SYS21M23_iCloud
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -3422,7 +3575,11 @@ SYS21M24 ()
 printf "	%b	Überprüfe, ob via Profilmanager das System ${MODELIDENTIFIER} verwaltet wird.  %s\\n" "${INFO}" | tee -a ${Audit_file}
 if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	system_profiler SPConfigurationProfileDataType >> ${evidence_folder}/SYS21M24_SPConfigurationProfileDataType
+	
+	if [ -e /Library/Managed\ Preferences/com.apple.systemuiserver.plist ] ; then
 	defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist >> ${evidence_folder}/SYS21M24_com_apple_systemuiserver_plist
+	fi
+	
 	printf "	%b	Das System ${MODELIDENTIFIER} wird mittels Profilen verwaltet. %s\\n" "${TICK}" | tee -a ${Audit_file}
 	printf "\n" | tee -a ${Audit_file}
 	printf "	%b	Überprüfe, ob via Profil Zugriffeinstellungen für Festplattenmedien (interne und externe Laufwerke, Images und DVD-Ram) installiert sind  %s\\n" "${INFO}" | tee -a ${Audit_file}
@@ -3437,31 +3594,34 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	local profiles_harddisk_internal=`system_profiler SPConfigurationProfileDataType | grep -c "harddisk-internal"`
 	if [ ${profiles_harddisk_internal} -gt 1 ] ; then
 		printf "	%b	Einstellungen für interne Festplatten werden von mehr als einem Profile vorgegeben. %s\\n" "${CROSS}" | tee -a ${Audit_file}
-	
+	elif [ ${profiles_harddisk_internal} == 1 ] ; then
+		printf "	%b	Einstellungen für interne Festplatten werden von einem Profile vorgegeben. %s\\n" "${TICK}" | tee -a ${Audit_file}
 	else
-		printf "	%b	Einstellungen für interne Festplatten werden von einem Profile vorgegeben. %s\\n" "${TICK}" | tee -a ${Audit_file}		
+		printf "	%b	Einstellungen für interne Festplatten werden von keinem Profile vorgegeben. %s\\n" "${ATTENTION}" | tee -a ${Audit_file}
 	fi
 		
-	printf "	%b	Überprüfe die Einstellungen für interne Festplatten (erlauben, mit Authentisierung oder nur Lesen)  %s\\n" "${INFO}" | tee -a ${Audit_file}
-		
-	local harddisk_internal_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/harddisk-internal/,/);/p' | grep -c "deny"`
-	if [ ${harddisk_internal_deny} == 1 ] ; then
-		printf "	%b	interne Festplatten dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
+	if [ -e /Library/Managed\ Preferences/com.apple.systemuiserver.plist ] ; then
+		printf "	%b	Überprüfe die Einstellungen für interne Festplatten (erlauben, mit Authentisierung oder nur Lesen)  %s\\n" "${INFO}" | tee -a ${Audit_file}
+		local harddisk_internal_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/harddisk-internal/,/);/p' | grep -c "deny"`
+		if [ ${harddisk_internal_deny} == 1 ] ; then
+			printf "	%b	interne Festplatten dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
 	
-	else	
+		else	
 	
-		local harddisk_internal_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/harddisk-internal/,/);/p' | grep -c "authenticate"`
-		if [ ${harddisk_internal_authenticate} == 1 ] ; then
-			printf "	%b	interne Festplatten dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
-		else
-			printf "	%b	interne Festplatten dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+			local harddisk_internal_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/harddisk-internal/,/);/p' | grep -c "authenticate"`
+			if [ ${harddisk_internal_authenticate} == 1 ] ; then
+				printf "	%b	interne Festplatten dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
+			else
+				printf "	%b	interne Festplatten dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
 		fi
-	
+		
 		local harddisk_internal_read_only=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/harddisk-internal/,/);/p' | grep -c "read-only"`
 		if [ ${harddisk_internal_read_only} == 1 ] ; then
 			printf "	%b	interne Festplatten dürfen nur lesend verwendet werden %s\\n"  | tee -a ${Audit_file}
-		fi		
-	fi
+		fi
+	
+	fi	
+fi
 	printf "\n" | tee -a ${Audit_file}
 	
 	#################################################
@@ -3475,29 +3635,34 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	if [ ${profiles_harddisk_external} -gt 1 ] ; then
 		printf "	%b	Einstellungen für externe Festplatten werden von mehr als einem Profile vorgegeben. %s\\n" "${CROSS}" | tee -a ${Audit_file}
 	
+	elif [ ${profiles_harddisk_external} == 1 ] ; then
+		printf "	%b	Einstellungen für externe Festplatten werden von einem Profile vorgegeben. %s\\n" "${TICK}" | tee -a ${Audit_file}	
+	
 	else
-		printf "	%b	Einstellungen für externe Festplatten werden von einem Profile vorgegeben. %s\\n" "${TICK}" | tee -a ${Audit_file}		
+		printf "	%b	Einstellungen für externe Festplatten werden von keinem Profile vorgegeben. %s\\n" "${ATTENTION}" | tee -a ${Audit_file}	
 	fi
-		
-	printf "	%b	Überprüfe die Einstellungen für externe Festplatten (erlauben, mit Authentisierung oder nur Lesen)  %s\\n" "${INFO}" | tee -a ${Audit_file}
-		
-	local harddisk_external_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/harddisk-external/,/);/p' | grep -c "deny"`
-	if [ ${harddisk_external_deny} == 1 ] ; then
-		printf "	%b	externe Festplatten dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
 	
-	else
+	if [ -e /Library/Managed\ Preferences/com.apple.systemuiserver.plist ] ; then	
+		printf "	%b	Überprüfe die Einstellungen für externe Festplatten (erlauben, mit Authentisierung oder nur Lesen)  %s\\n" "${INFO}" | tee -a ${Audit_file}
 		
-		local harddisk_external_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/harddisk-external/,/);/p' | grep -c "authenticate"`
-		if [ ${harddisk_external_authenticate} == 1 ] ; then
-			printf "	%b	externe Festplatten dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
+		local harddisk_external_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/harddisk-external/,/);/p' | grep -c "deny"`
+		if [ ${harddisk_external_deny} == 1 ] ; then
+			printf "	%b	externe Festplatten dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
+	
 		else
-			printf "	%b	externe Festplatten dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
-		fi
+		
+			local harddisk_external_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/harddisk-external/,/);/p' | grep -c "authenticate"`
+			if [ ${harddisk_external_authenticate} == 1 ] ; then
+				printf "	%b	externe Festplatten dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
+			else
+				printf "	%b	externe Festplatten dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+			fi
 	
-		local harddisk_external_read_only=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/harddisk-external/,/);/p' | grep -c "read-only"`
-		if [ ${harddisk_external_read_only} == 1 ] ; then
+			local harddisk_external_read_only=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/harddisk-external/,/);/p' | grep -c "read-only"`
+			if [ ${harddisk_external_read_only} == 1 ] ; then
 			printf "	%b	externe Festplatten dürfen nur lesend verwendet werden %s\\n"  | tee -a ${Audit_file}
-		fi		
+			fi
+		fi	
 	fi	
 	printf "\n" | tee -a ${Audit_file}
 	
@@ -3517,23 +3682,25 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	fi
 		
 	printf "	%b	Überprüfe die Einstellungen für Disk-Images (erlauben, mit Authentisierung oder nur Lesen)  %s\\n" "${INFO}" | tee -a ${Audit_file}
-		
-	local disk_image_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/disk-image/,/);/p' | grep -c "deny"`
-	if [ ${disk_image_deny} == 1 ] ; then
-		printf "	%b	Disk-Images dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
 	
-	else
-		
-		local disk_image_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/disk-image/,/);/p' | grep -c "authenticate"`
-		if [ ${disk_image_authenticate} == 1 ] ; then
-			printf "	%b	Disk-Images dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
+	if [ -e /Library/Managed\ Preferences/com.apple.systemuiserver.plist ] ; then	
+		local disk_image_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/disk-image/,/);/p' | grep -c "deny"`
+		if [ ${disk_image_deny} == 1 ] ; then
+			printf "	%b	Disk-Images dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
+			
 		else
-			printf "	%b	Disk-Images dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
-		fi
+		
+			local disk_image_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/disk-image/,/);/p' | grep -c "authenticate"`
+			if [ ${disk_image_authenticate} == 1 ] ; then
+				printf "	%b	Disk-Images dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
+			else
+				printf "	%b	Disk-Images dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+			fi
 	
-		local disk_image_read_only=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/disk-image/,/);/p' | grep -c "read-only"`
-		if [ ${disk_image_read_only} == 1 ] ; then
-			printf "	%b	Disk-Images dürfen nur lesend verwendet werden %s\\n"  | tee -a ${Audit_file}
+			local disk_image_read_only=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/disk-image/,/);/p' | grep -c "read-only"`
+			if [ ${disk_image_read_only} == 1 ] ; then
+				printf "	%b	Disk-Images dürfen nur lesend verwendet werden %s\\n"  | tee -a ${Audit_file}
+			fi
 		fi		
 	fi	
 	printf "\n" | tee -a ${Audit_file}
@@ -3554,25 +3721,27 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	fi
 		
 	printf "	%b	Überprüfe die Einstellungen für DVD-RAMs (erlauben, mit Authentisierung oder nur Lesen)  %s\\n" "${INFO}" | tee -a ${Audit_file}
-		
-	local dvdram_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/dvdram/,/);/p' | grep -c "deny"`
-	if [ ${dvdram_deny} == 1 ] ; then
-		printf "	%b	DVD-RAMs dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
-		
-	else
-		
-		local dvdram_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/dvdram/,/);/p' | grep -c "authenticate"`
-		if [ ${dvdram_authenticate} == 1 ] ; then
-			printf "	%b	DVD-RAMs dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
-		else
-			printf "	%b	DVD-RAMs dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
-		fi
 	
-		local dvdram_read_only=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/dvdram/,/);/p' | grep -c "read-only"`
-		if [ ${dvdram_read_only} == 1 ] ; then
-			printf "	%b	DVD-RAMs dürfen nur lesend verwendet werden %s\\n"  | tee -a ${Audit_file}
-		fi		
-	fi		
+	if [ -e /Library/Managed\ Preferences/com.apple.systemuiserver.plist ] ; then		
+		local dvdram_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/dvdram/,/);/p' | grep -c "deny"`
+		if [ ${dvdram_deny} == 1 ] ; then
+			printf "	%b	DVD-RAMs dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
+		
+		else
+		
+			local dvdram_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/dvdram/,/);/p' | grep -c "authenticate"`
+			if [ ${dvdram_authenticate} == 1 ] ; then
+				printf "	%b	DVD-RAMs dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
+			else
+				printf "	%b	DVD-RAMs dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+			fi
+	
+			local dvdram_read_only=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/dvdram/,/);/p' | grep -c "read-only"`
+			if [ ${dvdram_read_only} == 1 ] ; then
+				printf "	%b	DVD-RAMs dürfen nur lesend verwendet werden %s\\n"  | tee -a ${Audit_file}
+			fi		
+		fi
+	fi	
 	
 	printf "\n" | tee -a ${Audit_file}
 	printf "\n" | tee -a ${Audit_file}
@@ -3594,18 +3763,20 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	fi
 		
 	printf "	%b	Überprüfe die Einstellungen für CDs und CD-ROMs (erlauben und mit Authentisierung)  %s\\n" "${INFO}" | tee -a ${Audit_file}
-		
-	local cd_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | grep -v "blankcd =" | sed -n '/cd =/,/);/p' | grep -c "deny"`
-	if [ ${cd_deny} == 1 ] ; then
-		printf "	%b	CDs und CD-ROMs dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
 	
-	else
-		
-		local cd_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | grep -v "blankcd =" | sed -n '/cd =/,/);/p' | grep -c "authenticate"`
-		if [ ${cd_authenticate} == 1 ] ; then
-			printf "	%b	CDs und CD-ROMs dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
+	if [ -e /Library/Managed\ Preferences/com.apple.systemuiserver.plist ] ; then		
+		local cd_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | grep -v "blankcd =" | sed -n '/cd =/,/);/p' | grep -c "deny"`
+		if [ ${cd_deny} == 1 ] ; then
+			printf "	%b	CDs und CD-ROMs dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
+	
 		else
-			printf "	%b	CDs und CD-ROMs dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+		
+			local cd_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | grep -v "blankcd =" | sed -n '/cd =/,/);/p' | grep -c "authenticate"`
+			if [ ${cd_authenticate} == 1 ] ; then
+				printf "	%b	CDs und CD-ROMs dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
+			else
+				printf "	%b	CDs und CD-ROMs dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+			fi
 		fi
 	fi
 	printf "\n" | tee -a ${Audit_file}
@@ -3625,18 +3796,20 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	fi
 		
 	printf "	%b	Überprüfe die Einstellungen für DVDs (erlauben und mit Authentisierung)  %s\\n" "${INFO}" | tee -a ${Audit_file}
-		
-	local dvd_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | grep -v "blankdvd =" | sed -n '/dvd =/,/);/p' | grep -c "deny"`
-	if [ ${dvd_deny} == 1 ] ; then
-		printf "	%b	DVDs dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
+	
+	if [ -e /Library/Managed\ Preferences/com.apple.systemuiserver.plist ] ; then		
+		local dvd_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | grep -v "blankdvd =" | sed -n '/dvd =/,/);/p' | grep -c "deny"`
+		if [ ${dvd_deny} == 1 ] ; then
+			printf "	%b	DVDs dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
 			
-	else
-		
-		local dvd_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | grep -v "blankdvd =" | sed -n '/dvd =/,/);/p' | grep -c "authenticate"`
-		if [ ${dvd_authenticate} == 1 ] ; then
-			printf "	%b	DVDs dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
 		else
-			printf "	%b	DVDs dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+		
+			local dvd_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | grep -v "blankdvd =" | sed -n '/dvd =/,/);/p' | grep -c "authenticate"`
+			if [ ${dvd_authenticate} == 1 ] ; then
+				printf "	%b	DVDs dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
+			else
+				printf "	%b	DVDs dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+			fi
 		fi
 	fi
 	printf "\n" | tee -a ${Audit_file}
@@ -3657,18 +3830,20 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	fi
 		
 	printf "	%b	Überprüfe die Einstellungen für leere CDs (erlauben und mit Authentisierung)  %s\\n" "${INFO}" | tee -a ${Audit_file}
-		
-	local blankcd_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/blankcd/,/);/p' | grep -c "deny"`
-	if [ ${blankcd_deny} == 1 ] ; then
-		printf "	%b	leere CDs dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
+	
+	if [ -e /Library/Managed\ Preferences/com.apple.systemuiserver.plist ] ; then		
+		local blankcd_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/blankcd/,/);/p' | grep -c "deny"`
+		if [ ${blankcd_deny} == 1 ] ; then
+			printf "	%b	leere CDs dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
 			
-	else
-		
-		local blankcd_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/blankcd/,/);/p' | grep -c "authenticate"`
-		if [ ${blankcd_authenticate} == 1 ] ; then
-			printf "	%b	leere CDs dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
 		else
-			printf "	%b	leere CDs dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+		
+			local blankcd_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/blankcd/,/);/p' | grep -c "authenticate"`
+			if [ ${blankcd_authenticate} == 1 ] ; then
+				printf "	%b	leere CDs dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
+			else
+				printf "	%b	leere CDs dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+			fi
 		fi
 	fi
 	printf "\n" | tee -a ${Audit_file}
@@ -3689,18 +3864,20 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	fi
 		
 	printf "	%b	Überprüfe die Einstellungen für leere DVDs (erlauben und mit Authentisierung)  %s\\n" "${INFO}" | tee -a ${Audit_file}
-		
-	local blankdvd_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/blankdvd/,/);/p' | grep -c "deny"`
-	if [ ${blankdvd_deny} == 1 ] ; then
-		printf "	%b	leere DVDs dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
+	
+	if [ -e /Library/Managed\ Preferences/com.apple.systemuiserver.plist ] ; then	
+		local blankdvd_deny=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/blankdvd/,/);/p' | grep -c "deny"`
+		if [ ${blankdvd_deny} == 1 ] ; then
+			printf "	%b	leere DVDs dürfen nicht verwendet werden %s\\n"  | tee -a ${Audit_file}
 			
-	else
-		
-		local blankdvd_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/blankdvd/,/);/p' | grep -c "authenticate"`
-		if [ ${blankdvd_authenticate} == 1 ] ; then
-			printf "	%b	leere DVDs dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
 		else
-			printf "	%b	leere DVDs dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+		
+			local blankdvd_authenticate=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/blankdvd/,/);/p' | grep -c "authenticate"`
+			if [ ${blankdvd_authenticate} == 1 ] ; then
+				printf "	%b	leere DVDs dürfen nur mit Authentisierung verwendet werden %s\\n" "${TICK}" | tee -a ${Audit_file}
+			else
+				printf "	%b	leere DVDs dürfen ohne Authentisierung verwendet werden %s\\n" "${CROSS}" | tee -a ${Audit_file}
+			fi
 		fi
 	fi
 	printf "\n" | tee -a ${Audit_file}
@@ -3726,19 +3903,30 @@ if [ $(system_profiler SPConfigurationProfileDataType | wc -l) -gt 0 ] ; then
 	fi
 		
 	if [ ${profiles_logout_eject} -gt 1 ] && [ ${profiles_logout_eject} != 0 ]; then
-	printf "	%b	Überprüfe die Einstellungen für Wechselmedien auswerfen bei Abmeldung  %s\\n" "${INFO}" | tee -a ${Audit_file}
-	local medium_logout_eject=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/logout-eject/,/);/p' | grep -c "all-media"`
-		if [ ${medium_logout_eject} == 1 ] ; then
-			printf "	%b	Wechselmedien werden vor dem Abmelden vom System ausgeworfen. %s\\n" "${TICK}"  | tee -a ${Audit_file}
+		printf "	%b	Überprüfe die Einstellungen für Wechselmedien auswerfen bei Abmeldung  %s\\n" "${INFO}" | tee -a ${Audit_file}
+		if [ -e /Library/Managed\ Preferences/com.apple.systemuiserver.plist ] ; then	
+			local medium_logout_eject=`defaults read  /Library/Managed\ Preferences/com.apple.systemuiserver.plist | sed -n '/logout-eject/,/);/p' | grep -c "all-media"`
+			if [ ${medium_logout_eject} == 1 ] ; then
+				printf "	%b	Wechselmedien werden vor dem Abmelden vom System ausgeworfen. %s\\n" "${TICK}"  | tee -a ${Audit_file}
 						
-		else
-			printf "	%b	Wechselmedien werden vor dem Abmelden vom System nicht ausgeworfen %s\\n" "${CROSS}" | tee -a ${Audit_file}
+			else
+				printf "	%b	Wechselmedien werden vor dem Abmelden vom System nicht ausgeworfen %s\\n" "${CROSS}" | tee -a ${Audit_file}
+			fi
 		fi
-
 	fi
 	
 else
 	printf "	%b	Es ist kein Profilemanager hinterlegt. %s\\n" "${CROSS}" | tee -a ${Audit_file}
+	
+	printf "	%b	Es werden zentral keine Einstellungen für die interne Festplatte vorgeben.  %s\\n" "${CROSS}" | tee -a ${Audit_file}
+	printf "	%b	Es werden zentral keine Einstellungen für die externe Festplatte vorgeben.  %s\\n" "${CROSS}" | tee -a ${Audit_file}
+	printf "	%b	Es werden zentral keine Einstellungen für Disk-Images vorgeben.  %s\\n" "${CROSS}" | tee -a ${Audit_file}
+	printf "	%b	Es werden zentral keine Einstellungen für DVD-RAMs vorgeben.  %s\\n" "${CROSS}" | tee -a ${Audit_file}
+	printf "	%b	Es werden zentral keine Einstellungen für CDs und CD-ROMs vorgeben.  %s\\n" "${CROSS}" | tee -a ${Audit_file}
+	printf "	%b	Es werden zentral keine Einstellungen für DVDs vorgeben.  %s\\n" "${CROSS}" | tee -a ${Audit_file}
+	printf "	%b	Es werden zentral keine Einstellungen für leer CDs vorgeben.  %s\\n" "${CROSS}" | tee -a ${Audit_file}
+	printf "	%b	Es werden zentral keine Einstellungen für leer DVDs vorgeben.  %s\\n" "${CROSS}" | tee -a ${Audit_file}
+	printf "	%b	Es werden zentral keine Einstellungen für Wechselmedien auswerfen bei Abmeldung vorgeben.  %s\\n" "${CROSS}" | tee -a ${Audit_file}
 	
 	#################################################
 	# 
@@ -3761,6 +3949,8 @@ printf "\n" | tee -a ${Audit_file}
 }
 
 SYS21M24
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -3794,6 +3984,8 @@ SYS21M25 ()
 }
 
 SYS21M25
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -3832,8 +4024,6 @@ fi
 printf "\n" | tee -a ${Audit_file}
 }
 
-SYS21M26_SIP
-
 ###################################################
 # 
 # SYS.2.1.M26 Xprotect Status
@@ -3846,7 +4036,7 @@ printf "	%b	Überprüfung des Xprotect Status %s\\n" "${INFO}" | tee -a ${Audit_
 
 defaults read /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/XProtect.meta.plist 2> /dev/null >> ${evidence_folder}/SYS21M26_XProtect
 
-if [[ ${os_vers_major} -eq 10 ]] && [[ ${os_vers_minor} -gt 9 ]]; then
+if [[ ${OS_vers_major} -eq 10 ]] && [[ ${OS_vers_minor} -gt 9 ]]; then
 
   last_xprotect_update_epoch_time=$(printf "%s\n" `for i in $(pkgutil --pkgs=".*XProtect.*"); do pkgutil --pkg-info $i | awk '/install-time/ {print $2}'; done` | sort -n | tail -1)
   last_xprotect_update_human_readable_time=`/bin/date -r "$last_xprotect_update_epoch_time" '+%d.%m.%Y %H:%M:%S'`
@@ -3855,11 +4045,8 @@ if [[ ${os_vers_major} -eq 10 ]] && [[ ${os_vers_minor} -gt 9 ]]; then
   
 fi
 
-printf " 		Die letzte Xprotect Änderung erfolgte am "${XPROTECTCHECKRESULT}"\\n" | tee -a ${Audit_file}
 printf "\n\n" | tee -a ${Audit_file}
 }
-
-SYS21M26_Xprotect
 
 ###################################################
 # 
@@ -3881,7 +4068,14 @@ if [ ${GATEKEEPERSTATUS} == "enabled" ]; then
 fi
 }
 
+SYS21M26_SIP
+sleep 0.5
+
+SYS21M26_Xprotect
+sleep 0.5
+
 SYS21M26_Gatekeeper
+sleep 1
 
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
@@ -3914,6 +4108,8 @@ SYS21M27 ()
 }
 
 SYS21M27
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -3963,6 +4159,8 @@ if [ ${FILEVAULTSTATUS} == "Off." ]; then
 
 
 SYS24M4
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 ###################################################
@@ -3984,7 +4182,7 @@ printf %s "\
 # SYS.2.4.M5 Ortungsdienste
 #
 ###################################################
-SYS24M5_Ortungsdienste ()
+sub_SYS24M5_Ortungsdienste ()
 {
 #domains | tr ',' '\n'
 printf "	%b	Überprüfe die aktuellen Einstellungen für die Verwendung von Ortungsdiensten. %s\\n" "${INFO}" | tee -a ${Audit_file}
@@ -4000,12 +4198,34 @@ if [ $(sudo defaults read /private/var/db/locationd/Library/Preferences/ByHost/c
 	else
 			printf "	%b	Der Ortungsdienst ist global für Hardware UUID ${HW_UUID} aktiv %s\\n" "${CROSS}" | tee -a ${Audit_file}
 fi
-
-
-printf "\n" | tee -a ${Audit_file}
 }
 
-SYS24M5_Ortungsdienste 
+SYS24M5_Ortungsdienste ()
+{
+if [[ ${OS_vers_major} -eq 10 ]] && [[ ${OS_vers_minor} -ge 10 ]] && [[ ${OS_vers_minor} -lt 14 ]]; then
+
+	sub_SYS24M5_Ortungsdienste
+
+else
+	printf "	%b 	Überprüfe die macOS Version und ob der Pfad /var durch Systemintegritätsschutz (SIP) geschützt wird. %s\\n" "${INFO}" | tee -a ${Audit_file}
+		
+	SIPSTATUS=`csrutil status 2> /dev/null |  awk ' { print $5 }'`
+	if [ ${SIPSTATUS} == "enabled." ]; then
+		printf "	%b	System Integrity Protection (SIP) ist aktiv %s\\n" "${TICK}" | tee -a ${Audit_file}
+		# ab macOs 10.14 wird mittels SIP der Zugriff auf die Pfade /System , /usr , /bin , /sbin und /var geschützt
+		printf "	%b	Die Zugriffe auf die Pfade /System , /usr , /bin , /sbin und /var sind durch SIP unter macOS ${OSXVERSION} Build-Nummer ${OS_vers_build} geschützt. %s\\n" "${TICK}"
+		printf "	%b	Es kann nicht überprüft werden, ob der Ortungsdienst global für Hardware UUID ${HW_UUID} aktiv ist. %s\\n" "${INFO}" | tee -a ${Audit_file}
+	else
+		printf "	%b	System Integrity Protection (SIP) ist nicht aktiv %s\\n" "${CROSS}" | tee -a ${Audit_file}
+		printf "	%b	Die Zugriffe auf den Pfad /System , /usr , /bin , /sbin und /var sind durch SIP nicht geschützt. %s\\n" "${CROSS}"
+
+		sub_SYS24M5_Ortungsdienste
+	
+	fi
+fi
+	
+printf "\n" | tee -a ${Audit_file}
+}
 
 ###################################################
 #
@@ -4020,7 +4240,8 @@ defaults read com.apple.Safari 2> /dev/null >> ${evidence_folder}/SYS24M5_Browse
 if [ $(defaults read com.apple.Safari 2> /dev/null | grep "AutoOpenSafeDownloads" | wc -l) == "0" ]; then
 	
 		printf "	%b	Die Einstellung in Safari für das automatisch Öffnen von Dateien mit sicheren Endungen
-		ist nicht gesetzt %s\\n" "${TICK}" | tee -a ${Audit_file}
+		ist nicht gesetzt %s\\n" "${CROSS}" | tee -a ${Audit_file}
+		printf "	%b	Safari öffnet somit automatisch Dateien mit sicheren Endungen %s\\n" "${CROSS}" | tee -a ${Audit_file}
 	
 	else
 		if [ $(defaults read com.apple.Safari | grep "AutoOpenSafeDownloads" | awk ' { print $3 }') != "0;" ]; then
@@ -4035,7 +4256,6 @@ printf "\n" | tee -a ${Audit_file}
 
 }
 
-SYS24M5_Safari_AUTO_FILE
 
 ###################################################
 # 
@@ -4100,14 +4320,11 @@ do
 		printf "	%b	keine Einstellungen für den Benutzer ${User_gt_500} gefunden %s\\n" "${CROSS}" | tee -a ${Audit_file};
     fi
 
-
-printf "\n" | tee -a ${Audit_file}
 done < ${Audit_folder}/TMP_User_List_gt_500
 printf "\n" | tee -a ${Audit_file}
 
 }
 
-SYS24M5_CD_AUTO
 
 ###################################################
 # 
@@ -4160,12 +4377,10 @@ do
 		printf "	%b	keine Einstellungen für den Benutzer ${User_gt_500} gefunden %s\\n" "${CROSS}" | tee -a ${Audit_file};
     fi
 
-printf "\n" | tee -a ${Audit_file}
 done < ${Audit_folder}/TMP_User_List_gt_500
 printf "\n" | tee -a ${Audit_file}
 }
 
-SYS24M5_DVD_AUTO
 		
 ###################################################
 # 
@@ -4218,14 +4433,12 @@ do
 		printf "	%b	keine Einstellungen für den Benutzer ${User_gt_500} gefunden %s\\n" "${CROSS}" | tee -a ${Audit_file};
     fi
 
-printf "\n" | tee -a ${Audit_file}
 done < ${Audit_folder}/TMP_User_List_gt_500
 printf "\n" | tee -a ${Audit_file}	
 	
 
 }
 
-SYS24M5_MCD_AUTO
 
 ###################################################
 # 
@@ -4278,13 +4491,11 @@ do
 		printf "	%b	keine Einstellungen für den Benutzer ${User_gt_500} gefunden %s\\n" "${CROSS}" | tee -a ${Audit_file};
     fi
 
-printf "\n" | tee -a ${Audit_file}
 done < ${Audit_folder}/TMP_User_List_gt_500
 printf "\n" | tee -a ${Audit_file}		
 
 }
 
-SYS24M5_PCD_AUTO
 
 ###################################################
 # 
@@ -4336,14 +4547,32 @@ do
 	else
 		printf "	%b	keine Einstellungen für den Benutzer ${User_gt_500} gefunden %s\\n" "${CROSS}" | tee -a ${Audit_file};
     fi
-
-printf "\n" | tee -a ${Audit_file}
 done < ${Audit_folder}/TMP_User_List_gt_500
 printf "\n" | tee -a ${Audit_file}		
 
 }
 
+SYS24M5_Ortungsdienste 
+sleep 0.5
+
+SYS24M5_Safari_AUTO_FILE
+sleep 0.5
+
+SYS24M5_CD_AUTO
+sleep 0.5
+
+SYS24M5_DVD_AUTO
+sleep 0.5
+
+SYS24M5_MCD_AUTO
+sleep 0.5
+
+SYS24M5_PCD_AUTO
+sleep 0.5
+
 SYS24M5_VDVD_AUTO
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 ###################################################
@@ -4372,13 +4601,21 @@ printf "	%b	Zum bestimmen des richtigen Models an Hand des Model Identifier bitt
 printf "	%b	Aufruf des Links https://support.apple.com/de-de/HT201624 %s\\n" "${INFO}" | tee -a ${Audit_file}
 printf "	%b	Folgende Vintage Informationen wurden gefunden für den Model Name \""${MODELNAME}"\": %s\\n" "${ATTENTION}" | tee -a ${Audit_file}
 
+if [ ${MODELNAME} != "Apple" ]; then
+	
 VINTAGE=`curl --silent https://support.apple.com/de-de/HT201624 --stderr - | grep ${MODELNAME} | sed 's/<li>//' | sed 's/<\/li>/ <--> /'`
 			printf %s "\
 		"${VINTAGE}"" | tee -a ${Audit_file}
 			printf "\n\n" | tee -a ${Audit_file}
+			
+else
+		printf "	%b		Für das System ${MODELIDENTIFIER} liefert Apple keine Vintage Informationen. %s\\n" "${ATTENTION}" | tee -a ${Audit_file}
+fi
 }
 
 SYS24M6
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 ###################################################
@@ -4399,6 +4636,8 @@ SYS24M7 ()
 }
 
 SYS24M7
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 	
 ###################################################
@@ -4447,8 +4686,6 @@ printf "\n" | tee -a ${Audit_file}
 done < ${Audit_folder}/TMP_User_List_gt_500
 
 }
-
-SYS24M8_AirDrop
 
 ###################################################
 # 
@@ -4817,7 +5054,13 @@ done < ${Audit_folder}/TMP_User_List_gt_500
 
 }
 
+
+SYS24M8_AirDrop
+sleep 0.5
+
 SYS24M8_iCloud
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 	
 ###################################################
@@ -4841,6 +5084,8 @@ SYS24M9 ()
 }
 
 SYS24M9
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 ###################################################
@@ -4864,7 +5109,7 @@ printf %s "\
 SYS24M10_SOCKET_FILTER_FW ()
 {
 printf "	%b	überprüfe, ob die Application-Firewall von macOS aktiv ist  %s\\n" "${INFO}" | tee -a ${Audit_file}
-if [ $(/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate | awk ' { print $6 }' | sed 's/)//') == 1 ]; then
+if [ $(/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate | awk ' { print $6 }' | sed 's/)//') -ge 1 ]; then
 	printf "	%b	Die Application Firewall ist aktiv %s\\n" "${TICK}" | tee -a ${Audit_file}
 		
 		local Status_logging=`system_profiler SPFirewallDataType | grep "Firewall Logging" | awk ' { print $3 }'`
@@ -4913,8 +5158,6 @@ fi
 	printf "\n" | tee -a ${Audit_file}
 }
 
-SYS24M10_SOCKET_FILTER_FW
-
 ###################################################
 # 
 # SYS.2.4.M10 Packet firewall
@@ -4937,7 +5180,11 @@ fi
 printf "\n" | tee -a ${Audit_file}
 }
 
+SYS24M10_SOCKET_FILTER_FW
+sleep 1
+
 SYS24M10_Packet_FILTER_FW
+sleep 1
 
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
@@ -5003,9 +5250,8 @@ printf %s "\
 	Benutzer SOLLTEN darüber aufgeklärt werden, wie sie sich bei Verlust eines Authentisierungsmittels zu verhalten haben." | tee -a ${Audit_file}
 
 	printf "\n\n"| tee -a ${Audit_file}
-
+	
 SYS21M28 ()
-
 {
 printf "	%b	Überprüfe, ob die Festplattenverschlüsselung FileVault aktiv ist. %s\\n" "${INFO}" | tee -a ${Audit_file}
 
@@ -5014,25 +5260,29 @@ fdesetup status -extended >> ${evidence_folder}/SYS21M28_File_Vault_Status
 
 if [ ${FILEVAULTSTATUS} == "Off." ]; then
 	printf "	%b	Die Festplattenverschlüsselung FileVault ist nicht aktiv %s\\n" "${CROSS}" | tee -a ${Audit_file}
-else
-	printf "	%b	Die Festplattenverschlüsselung FileVault ist aktiv. %s\\n" "${TICK}" | tee -a ${Audit_file}
+		else
+			printf "	%b	Die Festplattenverschlüsselung FileVault ist aktiv. %s\\n" "${TICK}" | tee -a ${Audit_file}
 			
-	FILEVAULTVOLUME=`fdesetup status -extended | grep "Volume" | awk ' { print $3 }'`
+			FILEVAULTVOLUME=`fdesetup status -extended | grep "Volume" | awk ' { print $3 }'`
 			
-	printf %s "		Es wird als Festplattenvolume genutzt: "${FILEVAULTVOLUME}"" | tee -a ${Audit_file}
-	printf "\n" | tee -a ${Audit_file}
+			printf %s "		Es wird als Festplattenvolume genutzt: "${FILEVAULTVOLUME}"" | tee -a ${Audit_file}
+			printf "\n" | tee -a ${Audit_file}
 			
-	sudo fdesetup list >> ${evidence_folder}/SYS21M8_FILEFAULTUSERS_List
-	printf "	%b	Zeige die Kurznamen und UUIDs der freigegebenen FileVault-Benutzer. %s\\n" "${INFO}" | tee -a ${Audit_file}
-		while read FILEFAULTUSERS
+			sudo fdesetup list >> ${evidence_folder}/SYS21M28_FILE_VAULT_USERS_List
+			printf "	%b	Zeige die Kurznamen und UUIDs der freigegebenen FileVault-Benutzer. %s\\n" "${INFO}" | tee -a ${Audit_file}
+			while read SYS21M28_FILE_VAULT_USERS
 			do
-				printf " 		\""${FILEFAULTUSERS}"\" \\n" | tee -a ${Audit_file}
-			done < ${evidence_folder}/SYS21M28_FILEFAULTUSERS_List
-fi
-	printf "\n" | tee -a ${Audit_file}
+				printf " 		\""${SYS21M28_FILE_VAULT_USERS}"\" \\n" | tee -a ${Audit_file}
+			done < ${evidence_folder}/SYS21M28_FILE_VAULT_USERS_List
+						
+			printf "\n" | tee -a ${Audit_file}
+		fi
+		printf "\n" | tee -a ${Audit_file}
 }
 
 SYS21M28
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5168,6 +5418,8 @@ while read User_List_gt_500
 }
 
 SYS21M29
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5200,6 +5452,8 @@ printf "	%b	Sofern das gerade auditierte System nicht den Referenz-Client darste
 }
 
 SYS21M30
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5226,7 +5480,7 @@ printf %s "\
 SYS21M31_SOCKET_FILTER_FW ()
 {
 printf "	%b	überprüfe, ob die Application-Firewall von macOS aktiv ist  %s\\n" "${INFO}" | tee -a ${Audit_file}
-if [ $(/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate | awk ' { print $6 }' | sed 's/)//') == 1 ]; then
+if [ $(/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate | awk ' { print $6 }' | sed 's/)//') -ge 1 ]; then
 	printf "	%b	Die Application Firewall ist aktiv %s\\n" "${TICK}" | tee -a ${Audit_file}
 		
 		local Status_logging=`system_profiler SPFirewallDataType | grep "Firewall Logging" | awk ' { print $3 }'`
@@ -5275,8 +5529,6 @@ fi
 	printf "\n" | tee -a ${Audit_file}
 }
 
-SYS21M31_SOCKET_FILTER_FW
-
 ###################################################
 # 
 # SYS21M31 Packet firewall
@@ -5299,7 +5551,12 @@ fi
 printf "\n" | tee -a ${Audit_file}
 }
 
+SYS21M31_SOCKET_FILTER_FW
+sleep 1
+
 SYS21M31_Packet_FILTER_FW
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5342,8 +5599,6 @@ fi
 printf "\n" | tee -a ${Audit_file}
 }
 
-SYS21M32_SIP
-
 ###################################################
 # 
 # SYS.2.1.M32 Xprotect Status
@@ -5356,7 +5611,7 @@ printf "	%b	Überprüfung des Xprotect Status %s\\n" "${INFO}" | tee -a ${Audit_
 
 defaults read /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/XProtect.meta.plist 2> /dev/null >> ${evidence_folder}/SYS21M32_XProtect
 
-if [[ ${os_vers_major} -eq 10 ]] && [[ ${os_vers_minor} -gt 9 ]]; then
+if [[ ${OS_vers_major} -eq 10 ]] && [[ ${OS_vers_minor} -gt 9 ]]; then
 
   last_xprotect_update_epoch_time=$(printf "%s\n" `for i in $(pkgutil --pkgs=".*XProtect.*"); do pkgutil --pkg-info $i | awk '/install-time/ {print $2}'; done` | sort -n | tail -1)
   last_xprotect_update_human_readable_time=`/bin/date -r "$last_xprotect_update_epoch_time" '+%d.%m.%Y %H:%M:%S'`
@@ -5368,8 +5623,6 @@ fi
 
 printf "\n\n" | tee -a ${Audit_file}
 }
-
-SYS21M32_Xprotect
 
 ###################################################
 # 
@@ -5391,7 +5644,15 @@ if [ ${GATEKEEPERSTATUS} == "enabled" ]; then
 fi
 }
 
+SYS21M32_SIP
+sleep 1
+
+SYS21M32_Xprotect
+sleep 1
+
 SYS21M32_Gatekeeper
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5453,6 +5714,8 @@ fi
 }
 
 SYS21M33
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5494,7 +5757,7 @@ SYS21M34 ()
 		while read USER_gt_500
 		do
 			ls /Users/${USER_gt_500}/Library/Containers/ 2> /dev/null >> ${evidence_folder}/SYS21M34_User_${USER_gt_500}_sanboxed_apps
-			printf "  %b 	Dem Benutzer \""${USER_gt_500}"\" stehen folgende sandboxed Apps zur Verfügung: %s\\n" | tee -a ${Audit_file}
+			printf "	%b		Dem Benutzer \""${USER_gt_500}"\" stehen folgende sandboxed Apps zur Verfügung: %s\\n" | tee -a ${Audit_file}
 				
 				while read sanboxed_apps
 				do
@@ -5509,6 +5772,8 @@ printf "\n" | tee -a ${Audit_file}
 
 
 SYS21M34
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5540,6 +5805,8 @@ SYS21M35 ()
 }
 
 SYS21M35
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5568,6 +5835,8 @@ SYS21M36 ()
 }
 
 SYS21M36
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5591,6 +5860,8 @@ SYS21M37 ()
 }
 
 SYS21M37
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5619,6 +5890,8 @@ SYS21M38 ()
 }
 
 SYS21M38
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5650,6 +5923,8 @@ SYS21M39 ()
 }
 
 SYS21M39
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5678,6 +5953,8 @@ SYS21M40 ()
 }
 
 SYS21M40
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5717,6 +5994,8 @@ SYS21M41 ()
 }
 
 SYS21M41
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
 
 
@@ -5752,4 +6031,6 @@ printf "\n" | tee -a ${Audit_file}
 }
 
 SYS24M11
+sleep 1
+
 GEN_SUMMARY_SEPARATOR | tee -a ${Audit_file}
