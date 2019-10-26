@@ -1,6 +1,6 @@
 # macOS-Audit
 ## Zweck
-Das Skript ermöglicht es macOS 10.11, 10.12, 10.13 und 10.14 auf Basis der Anforderungen des BSI IT-Grundschutz zu auditieren.
+Das Skript ermöglicht es seit Version 0.9.7 macOS 10.11, 10.12, 10.13 und 10.14 auf Basis der Anforderungen des BSI IT-Grundschutz zu auditieren.
 
 ## Ergebnis
 Als Ergebnis wird eine Textdatei sowie alle relvante Auditteilergebnisse als TXT-Dateien gesichert. Die Ergebnisdateien werden im Pfad /private/tmp/BSI_Audit/${DATE} abgelegt.
