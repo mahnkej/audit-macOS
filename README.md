@@ -1,18 +1,17 @@
 # macOS-Audit
 ## Zweck
-Das Skript ermöglicht es macOS 10.11, 10.12 und 10.13 auf Basis der Anforderungen des BSI IT-Grundschutz zu auditieren.
+Das Skript ermöglicht es macOS 10.11, 10.12, 10.13 und 10.14 auf Basis der Anforderungen des BSI IT-Grundschutz zu auditieren.
 
 ## Ergebnis
 Als Ergebnis wird eine Textdatei sowie alle relvante Auditteilergebnisse als TXT-Dateien gesichert. Die Ergebnisdateien werden im Pfad /private/tmp/BSI_Audit/${DATE} abgelegt.
 
 ## Version
-V 0.9.0 RC
-Wahrscheinlich habe ich nicht alle mögliche Input/Output-Fehler auf grund von unterschiedlichen Gegebenheiten erkannt und abgefangen. Für Verbesserungsvorschläge bin ich jederzeit offen. 
+Wahrscheinlich habe ich nicht alle mögliche Input/Output-Fehler auf Grund von unterschiedlichen Gegebenheiten erkannt und abgefangen. Für Verbesserungsvorschläge bin ich jederzeit offen. 
 
 ## Vorausetzungen
-Das verwendete Benutzerkonto sollte sudo Rechte besitzen. 
+Das verwendete Benutzerkonto muss sudo Rechte besitzen und dem Programm Terminal muss voller Festplattenzugriff gewährt werden. 
 
-## Anforderungsbasis für das Audit
+## Anforderungsbasis für das Skript
 Für das Auditskript wurde auf das BSI IT-Grundschutz-Kompendium in der Edition 2019 zurückgegriffen und diese beiden Bausteine verwendet.
 
 ### SYS.2.1 Allgemeiner Client
